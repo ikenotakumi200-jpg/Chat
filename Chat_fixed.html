@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Sans', sans-serif; background: #b2dfdb; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+        /* LOADING */
+        #loading { position: fixed; inset: 0; background: rgba(0,185,0,0.97); display: none; flex-direction: column; align-items: center; justify-content: center; color: white; z-index: 9000; gap: 16px; }
+        #loading-icon { font-size: 3rem; animation: pulse-load 1s ease-in-out infinite; }
+        #loading-text { font-size: 0.9rem; opacity: 0.85; }
+        @keyframes pulse-load { 0%,100%{transform:scale(1)}50%{transform:scale(1.1)} }
+
+        /* INTEGRITY WARNING */
+        #integrity-warning { position: fixed; inset: 0; background: #cc0000; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; z-index: 99999; text-align: center; padding: 40px; gap: 16px; }
+        #integrity-warning h1 { font-size: 2rem; }
+        #integrity-warning p { font-size: 1rem; opacity: 0.85; max-width: 400px; line-height: 1.6; }
+
+        /* ROOM SCREEN */
+        #room-screen { position: fixed; inset: 0; background: #b2dfdb; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; z-index: 8000; overflow-y: auto; padding: 20px 16px 40px; gap: 14px; }
+        .room-logo { text-align: center; padding: 8px 0 4px; flex-shrink: 0; }
+        .room-logo-icon { font-size: 2.2rem; }
+        .room-logo-title { font-size: 1.1rem; font-weight: 700; color: #00b900; margin-top: 4px; }
+        .room-card { background: white; border-radius: 16px; width: 100%; max-width: 340px; box-shadow: 0 4px 20px rgba(0,0,0,0.12); overflow: hidden; flex-shrink: 0; }
+        .room-card-header { padding: 14px 20px; font-size: 0.95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; color: white; }
+        .rch-green { background: #00b900; }
+        .rch-dark { background: #333; }
+        .rch-blue { background: #0099cc; }
+        .room-card-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+        .room-input { width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 0.95rem; outline: none; transition: border-color 0.2s; }
+        .room-input:focus { border-color: #00b900; }
+        .room-btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 0.95rem; transition: opacity 0.2s; }
+        .room-btn:hover { opacity: 0.85; }
+        .btn-green { background: #00b900; color: white; }
+        .btn-dark { background: #333; color: white; }
+
+        /* ROOM LIST */
+        #room-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+        .rli { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f9f9f9; border: 1px solid #eee; border-radius: 8px; font-size: 0.82rem; }
+        .rli-info { flex: 1; cursor: pointer; }
+        .rli-name { font-weight: 700; color: #222; }
+        .rli-sub { font-size: 0.7rem; color: #888; margin-top: 1px; }
+        .rli-btns { display: flex; gap: 4px; }
+        .rli-btn { padding: 3px 8px; border: none; border-radius: 5px; cursor: pointer; font-size: 0.72rem; font-weight: 700; }
+        .rlib-join { background: #00b900; color: white; }
+        .rlib-del { background: #ff3333; color: white; }
+
+        /* HEADER */
+        #header { background: #00b900; color: white; padding: 11px 14px; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10; flex-shrink: 0; }
+        #header-icon { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+        #header-info { flex: 1; overflow: hidden; }
+        #header-title { font-size: 0.9rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #header-sub { font-size: 0.65rem; opacity: 0.85; margin-top: 1px; }
+        .hbtn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 9px; border-radius: 20px; font-size: 0.7rem; cursor: pointer; transition: background 0.2s; flex-shrink: 0; white-space: nowrap; }
+        .hbtn:hover { background: rgba(255,255,255,0.35); }
+
+        /* CHAT */
+        #chat-box { flex: 1; overflow-y: auto; padding: 14px 10px; display: flex; flex-direction: column; gap: 3px; background: #b2dfdb; }
+        .date-sep { text-align: center; font-size: 0.68rem; color: rgba(0,0,0,0.4); margin: 6px 0; display: flex; align-items: center; gap: 8px; }
+        .date-sep::before,.date-sep::after { content:''; flex:1; height:1px; background:rgba(0,0,0,0.15); }
+        .msg-row { display: flex; align-items: flex-end; gap: 5px; margin: 1px 0; }
+        .msg-row.me { flex-direction: row-reverse; }
+        .avatar { width: 32px; height: 32px; border-radius: 50%; color: white; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        .msg-row.me .avatar { display: none; }
+        .msg-group { display: flex; flex-direction: column; gap: 2px; max-width: 74%; }
+        .msg-row.me .msg-group { align-items: flex-end; }
+        .sender-name { font-size: 0.68rem; color: rgba(0,0,0,0.5); margin-bottom: 1px; padding-left: 2px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+        .msg-row.me .sender-name { display: none; }
+        .admin-badge { font-size: 0.58rem; background: #fff3cd; color: #856404; padding: 1px 5px; border-radius: 8px; font-weight: 700; }
+        .bubble { padding: 9px 13px; border-radius: 18px; font-size: 0.88rem; line-height: 1.5; word-break: break-word; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 100%; }
+        .msg-row.other .bubble { background: #fff; color: #111; border-bottom-left-radius: 4px; }
+        .msg-row.me .bubble { background: #c8f59c; color: #111; border-bottom-right-radius: 4px; }
+        .bubble.ng { background: #ffe6e6 !important; color: #ff3333; font-weight: 700; }
+        .msg-time { font-size: 0.6rem; color: rgba(0,0,0,0.4); flex-shrink: 0; align-self: flex-end; margin-bottom: 1px; white-space: nowrap; }
+        .bubble img,.bubble video { max-width: 220px; border-radius: 10px; display: block; margin: 2px 0; }
+        .action-btn { font-size: 0.58rem; cursor: pointer; padding: 1px 5px; border-radius: 6px; border: 1px solid; font-weight: 700; transition: opacity 0.2s; background: none; }
+        .action-btn:hover { opacity: 0.7; }
+        .btn-report { color: #ff6600; border-color: #ff6600; }
+        .btn-kick { color: #cc0000; border-color: #cc0000; }
+
+        /* 通報トースト */
+        .report-toast { background: #ffe6e6; color: #ff3333; padding: 10px 14px; margin: 6px auto; border-radius: 12px; text-align: center; font-size: 0.78rem; font-weight: bold; width: 90%; box-shadow: 0 2px 6px rgba(0,0,0,0.12); animation: fadeOutEffect 4s forwards; }
+        @keyframes fadeOutEffect { 0%{opacity:1;transform:translateY(0)} 80%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-10px);pointer-events:none} }
+
+        /* INPUT */
+        #input-area { background: #f5f5f5; padding: 9px 11px; display: flex; align-items: flex-end; gap: 7px; border-top: 1px solid rgba(0,0,0,0.1); flex-shrink: 0; }
+        #msg-input { flex:1; padding:9px 14px; border-radius:22px; border:1px solid #ddd; outline:none; font-size:0.92rem; background:white; resize:none; max-height:120px; min-height:40px; line-height:1.4; font-family:inherit; transition:border-color 0.2s; }
+        #msg-input:focus { border-color: #00b900; }
+        #send-btn { width:40px; height:40px; border-radius:50%; background:#00b900; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s,transform 0.1s; flex-shrink:0; }
+        #send-btn:hover { background:#009900; }
+        #send-btn:active { transform:scale(0.93); }
+        #send-btn svg { width:18px; height:18px; fill:white; }
+        #send-btn:disabled { background:#ccc; cursor:not-allowed; }
+
+        /* MODALS */
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center; }
+        .modal-overlay.show { display:flex; }
+        .modal-box { background:white; border-radius:16px; padding:24px; width:300px; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
+        .modal-box h3 { font-size:1rem; margin-bottom:8px; color:#333; }
+        .modal-box p { font-size:0.78rem; color:#888; margin-bottom:14px; line-height:1.5; }
+        .modal-input { width:100%; padding:10px 14px; border:1px solid #ddd; border-radius:10px; font-size:0.92rem; outline:none; margin-bottom:12px; }
+        .modal-input:focus { border-color:#00b900; }
+        .modal-btns { display:flex; gap:8px; }
+        .modal-btns button { flex:1; padding:10px; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-size:0.85rem; }
+        .mbtn-cancel { background:#f0f0f0; color:#333; }
+        .mbtn-ok { background:#00b900; color:white; }
+
+        #chat-box::-webkit-scrollbar { width:4px; }
+        #chat-box::-webkit-scrollbar-track { background:transparent; }
+        #chat-box::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:2px; }
+    </style>
+</head>
+<body>
+
+<div id="integrity-warning">
+    <h1>⚠️ SECURITY ALERT</h1>
+    <p>このファイルは改ざんされている可能性があります。<br>安全のため接続を遮断しました。<br>信頼できる場所から再度ファイルを取得してください。</p>
+</div>
+
+<div id="loading">
+    <div id="loading-icon">💬</div>
+    <div id="loading-text">接続中...</div>
+</div>
+
+<div id="name-modal" class="modal-overlay">
+    <div class="modal-box">
+        <h3>✏️ 表示名を変更</h3>
+        <input type="text" id="name-input-field" class="modal-input" placeholder="名前を入力..." maxlength="20">
+        <div class="modal-btns">
+            <button class="mbtn-cancel" id="name-cancel">キャンセル</button>
+            <button class="mbtn-ok" id="name-ok">OK</button>
+        </div>
+    </div>
+</div>
+
+<div id="pw-modal" class="modal-overlay">
+    <div class="modal-box">
+        <h3>🔐 パスワード設定</h3>
+        <p>入室パスワードを設定します。<br>空白のままOKを押すとパスワードなしになります。</p>
+        <input type="password" id="pw-input-field" class="modal-input" placeholder="パスワード（任意）" maxlength="50">
+        <div class="modal-btns">
+            <button class="mbtn-cancel" id="pw-cancel">キャンセル</button>
+            <button class="mbtn-ok" id="pw-ok">設定する</button>
+        </div>
+    </div>
+</div>
+
+<div id="room-screen">
+    <div class="room-logo">
+        <div class="room-logo-icon">💬</div>
+        <div class="room-logo-title">Chat</div>
+    </div>
+
+    <div class="room-card" style="max-width:340px;width:100%">
+        <div class="room-card-header rch-green">🚪 チャットに参加する</div>
+        <div class="room-card-body">
+            <input type="text" id="room-id-input" class="room-input" placeholder="チャット番号を入力" maxlength="10">
+            <input type="password" id="room-pw-input" class="room-input" placeholder="パスワード（設定されている場合）">
+            <button id="join-room-btn" class="room-btn btn-green">入室する →</button>
+        </div>
+    </div>
+
+    <div class="room-card" style="max-width:340px;width:100%">
+        <div class="room-card-header rch-dark">⚙️ 管理者用</div>
+        <div class="room-card-body">
+            <button id="create-room-btn" class="room-btn btn-dark">新しくチャットを作る</button>
+        </div>
+    </div>
+
+    <div class="room-card" style="max-width:340px;width:100%">
+        <div class="room-card-header rch-blue">📋 自分が作ったチャット</div>
+        <div class="room-card-body" style="padding:12px">
+            <div id="room-list"><div style="font-size:0.8rem;color:#aaa;text-align:center;padding:8px">読み込み中...</div></div>
+        </div>
+    </div>
+</div>
+
+<div id="header">
+    <div id="header-icon">💬</div>
+    <div id="header-info">
+        <div id="header-title">Chat</div>
+        <div id="header-sub">接続中...</div>
+    </div>
+    <button class="hbtn" id="name-btn">✏️ 名前</button>
+    <button class="hbtn" id="pw-change-btn" style="display:none">🔐 PW</button>
+    <button class="hbtn" id="exit-btn">🚪 退出</button>
+</div>
+
+<div id="chat-box"></div>
+
+<div id="input-area">
+    <textarea id="msg-input" placeholder="メッセージを入力..." rows="1" autocomplete="off"></textarea>
+    <button id="send-btn" disabled>
+        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy,
+             serverTimestamp, limit, doc, setDoc, getDoc, deleteDoc, updateDoc, getDocs }
+        from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyChebH0Mm_LXx8-Gb0zRAvtOyn4YxABsKE",
+        authDomain: "chat-b90d0.firebaseapp.com",
+        projectId: "chat-b90d0",
+        storageBucket: "chat-b90d0.firebasestorage.app",
+        messagingSenderId: "772990532899",
+        appId: "1:772990532899:web:a4d6be8bd5a8f8d5a76096",
+        measurementId: "G-9EB1QBPWQH"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ===== 状態変数 =====
+    let currentRoomId = null;
+    let chatUnsubscribe = null;
+    let reportUnsubscribe = null;
+    let roomUnsubscribe = null;
+    let heartbeatInterval = null;
+    let currentAdmin = '';
+    let isAdmin = false;
+    let lastReportTime = 0;
+
+    const roomScreen = document.getElementById('room-screen');
+    const loadingScreen = document.getElementById('loading');
+    const chatBox = document.getElementById('chat-box');
+    const input = document.getElementById('msg-input');
+    const btn = document.getElementById('send-btn');
+
+    // ===== 名前初期化 =====
+    let myName = localStorage.getItem('chat-name');
+    if (!myName || !myName.trim()) {
+        myName = window.prompt('チャットで使う名前を入力してください') || '名無しさん';
+        myName = myName.slice(0, 20);
+        localStorage.setItem('chat-name', myName);
+    }
+
+    // ===== SecureEngine =====
+    const SecureEngine = (() => {
+        const hist = [];
+        function freezeRuntime() {
+            try { Object.freeze(crypto); } catch(e) {}
+        }
+        function detectSpam() {
+            const now = Date.now();
+            hist.push(now);
+            while (hist.length && now - hist[0] > 5000) hist.shift();
+            return hist.length > 8;
+        }
+        function integrityCheck() {
+            try {
+                const fns = [fetch, crypto.subtle.encrypt, crypto.subtle.decrypt];
+                for (const fn of fns) {
+                    if (!fn.toString().includes('[native code]')) { triggerIntegrityFail(); }
+                }
+            } catch { /* アクセスエラーは無視（false alarm防止） */ }
+        }
+        function init() {
+            freezeRuntime();
+            setInterval(integrityCheck, 3000);
+        }
+        return { init, detectSpam };
+    })();
+    SecureEngine.init();
+
+    // ===== Firebase整合性チェック =====
+    // このファイルのSHA-256ハッシュをFirebaseに保存し、
+    // 起動時に照合することで改ざんを検知する
+    async function computeHash(text) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+
+    // パスワードをハッシュ化（空文字はそのまま）
+    async function hashPassword(pw) {
+        if (!pw) return '';
+        return await computeHash(pw);
+    }
+
+    // ===== 永続ユーザーID（名前変更でBANを回避させない）=====
+    let myUserId = localStorage.getItem('chat-uid');
+    if (!myUserId) {
+        myUserId = crypto.randomUUID ? crypto.randomUUID()
+            : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+        localStorage.setItem('chat-uid', myUserId);
+    }
+
+    async function checkIntegrity() {
+        try {
+            // HTTPSまたはlocalhostの場合のみfetchが使える
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+
+            const res = await fetch(location.href, { cache: 'no-store' });
+            const html = await res.text();
+            const currentHash = await computeHash(html);
+
+            // Firestoreに保存されている正規ハッシュを取得
+            const snap = await getDoc(doc(db, 'integrity', 'chat'));
+
+            if (!snap.exists()) {
+                // 初回：現在のハッシュを正規ハッシュとして登録（管理者が最初に開いた時）
+                console.log('[Integrity] 初回登録:', currentHash.slice(0, 16) + '...');
+                // ※ 管理者が意図的に登録する場合のみ有効にする
+                // await setDoc(doc(db, 'integrity', 'chat'), { hash: currentHash, registeredAt: serverTimestamp() });
+                return;
+            }
+
+            const registeredHash = snap.data().hash;
+            if (currentHash !== registeredHash) {
+                // 改ざん検知！
+                triggerIntegrityFail();
+            } else {
+                console.log('[Integrity] ✅ 整合性チェック通過');
+            }
+        } catch (e) {
+            // fetchエラー（file://プロトコル等）は無視
+            console.log('[Integrity] スキップ:', e.message);
+        }
+    }
+
+    function triggerIntegrityFail() {
+        document.getElementById('integrity-warning').style.display = 'flex';
+        // Firebase接続を切断
+        if (chatUnsubscribe) chatUnsubscribe();
+        if (reportUnsubscribe) reportUnsubscribe();
+        if (roomUnsubscribe) roomUnsubscribe();
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        throw new Error('INTEGRITY_COMPROMISED');
+    }
+
+    // 整合性チェックを実行（非同期・エラーが出ても続行）
+    checkIntegrity().catch(() => {});
+
+    // ===== XSSエスケープ =====
+    function esc(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    // ===== メディア描画 =====
+    function renderContent(text) {
+        const safe = esc(text);
+        try {
+            const url = new URL(text);
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') return safe;
+            const path = url.pathname.toLowerCase();
+            if (/\.(jpeg|jpg|gif|png|webp)$/.test(path)) {
+                const img = document.createElement('img');
+                img.className = 'media-content'; img.loading = 'lazy'; img.alt = '画像'; img.src = url.href;
+                img.onerror = () => { img.style.display = 'none'; };
+                const w = document.createElement('div'); w.appendChild(img); return w.innerHTML;
+            }
+            if (/\.(mp4|webm|ogg)$/.test(path)) {
+                const vid = document.createElement('video');
+                vid.className = 'media-content'; vid.controls = true; vid.src = url.href;
+                const w = document.createElement('div'); w.appendChild(vid); return w.innerHTML;
+            }
+            return `<a href="${url.href}" target="_blank" rel="noopener noreferrer" style="color:#0066cc">${safe}</a>`;
+        } catch {
+            return safe.replace(/\n/g, '<br>');
+        }
+    }
+
+    function getInitial(name) { return (name || '?').charAt(0).toUpperCase(); }
+    function formatDate(ts) {
+        if (!ts) return '';
+        const d = new Date(ts.seconds * 1000);
+        const today = new Date();
+        const yest = new Date(today); yest.setDate(today.getDate() - 1);
+        if (d.toDateString() === today.toDateString()) return '今日';
+        if (d.toDateString() === yest.toDateString()) return '昨日';
+        return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+    }
+    function formatTime(ts) {
+        if (!ts) return '...';
+        return new Date(ts.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    // ===== BANチェック（Firestore）=====
+    async function checkBanned(roomId, name) {
+        try {
+            const [nameSnap, uidSnap] = await Promise.all([
+                getDoc(doc(db, 'rooms', roomId, 'bans', name)),
+                getDoc(doc(db, 'rooms', roomId, 'bans', 'uid_' + myUserId))
+            ]);
+            return nameSnap.exists() || uidSnap.exists();
+        } catch { return false; }
+    }
+
+    // ===== パスワードモーダルをPromiseで操作 =====
+    function openPwModal() {
+        const pwModal = document.getElementById('pw-modal');
+        const pwField = document.getElementById('pw-input-field');
+        pwField.value = '';
+        pwModal.classList.add('show');
+        pwField.focus();
+        return new Promise(resolve => {
+            document.getElementById('pw-ok').onclick = () => {
+                pwModal.classList.remove('show');
+                resolve(pwField.value.trim());
+            };
+            document.getElementById('pw-cancel').onclick = () => {
+                pwModal.classList.remove('show');
+                resolve(null);
+            };
+        });
+    }
+
+    // ===== ルーム一覧（自分が管理者のルームをFirestoreから取得）=====
+    onSnapshot(collection(db, 'rooms'), snapshot => {
+        const listEl = document.getElementById('room-list');
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        let count = 0;
+        snapshot.forEach(roomDoc => {
+            const rid = roomDoc.id;
+            const rdata = roomDoc.data();
+            if (rdata.admin !== myName) return;
+            count++;
+            const item = document.createElement('div');
+            item.className = 'rli';
+            const info = document.createElement('div');
+            info.className = 'rli-info';
+            info.innerHTML = `<div class="rli-name">🔑 ルーム: ${esc(rid)} ${rdata.passwordHash ? '🔒' : '🔓'}</div><div class="rli-sub">作成者: ${esc(rdata.admin)}</div>`;
+            info.onclick = () => {
+                document.getElementById('room-id-input').value = rid;
+                document.getElementById('room-pw-input').value = '';
+            };
+            const btns = document.createElement('div');
+            btns.className = 'rli-btns';
+            const joinBtn = document.createElement('button');
+            joinBtn.className = 'rli-btn rlib-join'; joinBtn.textContent = '選択';
+            joinBtn.onclick = () => { info.onclick(); };
+            const delBtn = document.createElement('button');
+            delBtn.className = 'rli-btn rlib-del'; delBtn.textContent = '削除';
+            delBtn.onclick = async e => {
+                e.stopPropagation();
+                if (confirm(`ルーム「${rid}」を完全に削除しますか？`)) {
+                    try { await deleteDoc(doc(db, 'rooms', rid)); alert('削除しました。'); }
+                    catch(err) { alert('削除失敗: ' + err.message); }
+                }
+            };
+            btns.appendChild(joinBtn); btns.appendChild(delBtn);
+            item.appendChild(info); item.appendChild(btns);
+            listEl.appendChild(item);
+        });
+        if (count === 0) listEl.innerHTML = '<div style="font-size:0.78rem;color:#aaa;text-align:center;padding:8px">まだ作ったルームはありません</div>';
+    });
+
+    // ===== チャット作成 =====
+    document.getElementById('create-room-btn').onclick = async () => {
+        const newRoomId = Math.floor(100000 + Math.random() * 900000).toString();
+        const pw = await openPwModal();
+        if (pw === null) return; // キャンセル
+
+        try {
+            loadingScreen.style.display = 'flex';
+            document.getElementById('loading-text').textContent = 'ルーム作成中...';
+
+            // 管理者トークン生成（ローカルに保存してFirestoreにはハッシュのみ）
+            const adminToken = crypto.randomUUID ? crypto.randomUUID()
+                : myUserId + '-' + Date.now();
+            const adminTokenHash = await computeHash(adminToken);
+            localStorage.setItem('adminToken-' + newRoomId, adminToken);
+
+            await setDoc(doc(db, 'rooms', newRoomId), {
+                passwordHash: await hashPassword(pw),
+                createdAt: serverTimestamp(),
+                admin: myName,
+                adminTokenHash: adminTokenHash
+            });
+
+            await setDoc(doc(db, 'rooms', newRoomId, 'active_users', myName), {
+                updatedAt: serverTimestamp(), joinedAt: serverTimestamp()
+            });
+
+            heartbeatInterval = setInterval(async () => {
+                if (!currentRoomId) return;
+                await setDoc(doc(db, 'rooms', currentRoomId, 'active_users', myName), { updatedAt: serverTimestamp() });
+            }, 30000);
+
+            loadingScreen.style.display = 'none';
+            alert(`【チャット作成成功！】\n\nチャット番号: ${newRoomId}${pw ? `\nパスワード: ${pw}` : '\nパスワード: なし'}\n\nこの番号を参加させたい人に教えてください。`);
+
+            currentRoomId = newRoomId;
+            currentAdmin = myName;
+            isAdmin = true;
+            roomScreen.style.display = 'none';
+            document.getElementById('pw-change-btn').style.display = '';
+            startChat();
+        } catch(e) {
+            loadingScreen.style.display = 'none';
+            alert('作成エラー: ' + e.message);
+        }
+    };
+
+    // ===== 入室 =====
+    document.getElementById('join-room-btn').onclick = async () => {
+        const rid = document.getElementById('room-id-input').value.trim();
+        const rpw = document.getElementById('room-pw-input').value;
+        if (!rid) return alert('チャット番号を入力してください');
+
+        loadingScreen.style.display = 'flex';
+        document.getElementById('loading-text').textContent = 'ルームを探しています...';
+
+        try {
+            // BANチェック（Firestore）
+            const banned = await checkBanned(rid, myName);
+            if (banned) {
+                loadingScreen.style.display = 'none';
+                return alert('【アクセス拒否】あなたはこの部屋を追放されています。');
+            }
+
+            const roomSnap = await getDoc(doc(db, 'rooms', rid));
+            if (!roomSnap.exists()) {
+                loadingScreen.style.display = 'none';
+                return alert('その番号のチャットは存在しません！');
+            }
+
+            const roomData = roomSnap.data();
+            if (roomData.passwordHash && roomData.passwordHash !== await hashPassword(rpw)) {
+                loadingScreen.style.display = 'none';
+                return alert('パスワードが違います！');
+            }
+
+            // 名前重複チェック
+            const userSnap = await getDoc(doc(db, 'rooms', rid, 'active_users', myName));
+            if (userSnap.exists()) {
+                const lastActive = userSnap.data().updatedAt?.toMillis() || 0;
+                if (Date.now() - lastActive < 300000) {
+                    loadingScreen.style.display = 'none';
+                    return alert('同じ名前のユーザーが既にいます。名前を変更してください。');
+                }
+            }
+
+            currentAdmin = roomData.admin || '';
+            // 管理者トークンで認証（名前変更で管理者を騙れないようにする）
+            const localToken = localStorage.getItem('adminToken-' + rid);
+            if (localToken && roomData.adminTokenHash) {
+                const localTokenHash = await computeHash(localToken);
+                isAdmin = localTokenHash === roomData.adminTokenHash;
+            } else {
+                isAdmin = currentAdmin === myName;
+            }
+
+            await setDoc(doc(db, 'rooms', rid, 'active_users', myName), {
+                updatedAt: serverTimestamp(), joinedAt: serverTimestamp()
+            });
+
+            heartbeatInterval = setInterval(async () => {
+                if (!currentRoomId) return;
+                await setDoc(doc(db, 'rooms', currentRoomId, 'active_users', myName), { updatedAt: serverTimestamp() });
+            }, 30000);
+
+            currentRoomId = rid;
+            loadingScreen.style.display = 'none';
+            roomScreen.style.display = 'none';
+            document.getElementById('pw-change-btn').style.display = isAdmin ? '' : 'none';
+            startChat();
+        } catch(e) {
+            loadingScreen.style.display = 'none';
+            alert('入室エラー: ' + e.message);
+        }
+    };
+
+    // Enterキーで入室
+    ['room-id-input','room-pw-input'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') document.getElementById('join-room-btn').click();
+        });
+    });
+
+    // ===== 退出（★修正：確実に退出・管理者委譲）=====
+    async function exitRoom() {
+        if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+        if (reportUnsubscribe) { reportUnsubscribe(); reportUnsubscribe = null; }
+        if (roomUnsubscribe) { roomUnsubscribe(); roomUnsubscribe = null; }
+        if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+
+        if (currentRoomId) {
+            try {
+                // 管理者が退出する場合：次の管理者を探す
+                if (isAdmin) {
+                    const usersSnap = await getDocs(query(
+                        collection(db, 'rooms', currentRoomId, 'active_users'),
+                        orderBy('joinedAt', 'asc')
+                    ));
+                    let nextAdmin = null;
+                    for (const uDoc of usersSnap.docs) {
+                        if (uDoc.id !== myName) {
+                            const lastActive = uDoc.data().updatedAt?.toMillis() || 0;
+                            if (Date.now() - lastActive < 300000) {
+                                nextAdmin = uDoc.id;
+                                break;
+                            }
+                        }
+                    }
+                    if (nextAdmin) {
+                        await updateDoc(doc(db, 'rooms', currentRoomId), { admin: nextAdmin });
+                        // システムメッセージ
+                        await addDoc(collection(db, 'rooms', currentRoomId, 'messages'), {
+                            name: 'SYSTEM', text: `👑 管理者が「${nextAdmin}」に交代しました`,
+                            createdAt: serverTimestamp()
+                        });
+                    }
+                    // ※チャットルーム自体は削除しない（管理者退出後もチャット継続）
+                }
+                await deleteDoc(doc(db, 'rooms', currentRoomId, 'active_users', myName));
+            } catch(e) { console.error('退出エラー:', e); }
+        }
+
+        currentRoomId = null;
+        currentAdmin = '';
+        isAdmin = false;
+        chatBox.innerHTML = '';
+        input.value = '';
+        input.style.height = 'auto';
+        btn.disabled = true;
+        document.getElementById('header-sub').textContent = '接続中...';
+        document.getElementById('header-title').textContent = 'Chat';
+        document.getElementById('room-id-input').value = '';
+        document.getElementById('room-pw-input').value = '';
+        document.getElementById('pw-change-btn').style.display = 'none';
+        roomScreen.style.display = 'flex';
+    }
+
+    document.getElementById('exit-btn').onclick = async () => {
+        if (confirm('このチャットから退出しますか？')) await exitRoom();
+    };
+
+    // ===== パスワード変更（管理者）=====
+    document.getElementById('pw-change-btn').onclick = async () => {
+        if (!isAdmin || !currentRoomId) return;
+        const newPw = await openPwModal();
+        if (newPw === null) return;
+        try {
+            await updateDoc(doc(db, 'rooms', currentRoomId), { passwordHash: await hashPassword(newPw) });
+            alert(`パスワードを${newPw ? `「${newPw}」に変更` : '削除（パスワードなし）に変更'}しました。`);
+        } catch(e) { alert('変更失敗: ' + e.message); }
+    };
+
+    // ===== 名前変更 =====
+    const nameModal = document.getElementById('name-modal');
+    const nameField = document.getElementById('name-input-field');
+    document.getElementById('name-btn').onclick = () => {
+        nameField.value = myName;
+        nameModal.classList.add('show');
+        nameField.focus(); nameField.select();
+    };
+    document.getElementById('name-cancel').onclick = () => nameModal.classList.remove('show');
+    document.getElementById('name-ok').onclick = async () => {
+        const n = nameField.value.trim().slice(0, 20);
+        if (!n) return;
+        if (currentRoomId && n !== myName) {
+            const userSnap = await getDoc(doc(db, 'rooms', currentRoomId, 'active_users', n));
+            if (userSnap.exists() && (userSnap.data().updatedAt?.toMillis() || 0) > Date.now() - 300000) {
+                return alert('その名前は既に使用中です。');
+            }
+            try { await deleteDoc(doc(db, 'rooms', currentRoomId, 'active_users', myName)); } catch(e) {}
+            await setDoc(doc(db, 'rooms', currentRoomId, 'active_users', n), {
+                updatedAt: serverTimestamp(), joinedAt: serverTimestamp()
+            });
+        }
+        myName = n;
+        localStorage.setItem('chat-name', myName);
+        nameModal.classList.remove('show');
+    };
+    nameField.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('name-ok').click(); });
+    nameModal.addEventListener('click', e => { if (e.target === nameModal) nameModal.classList.remove('show'); });
+
+    // ===== 送信 =====
+    const NG_WORDS = ['しね', '死ね', 'ころす', '殺す', 'きもい', 'キモい', 'バカ', '馬鹿', 'うんこ', 'カス', 'ゴミ', 'ごみ', 'ガイジ', 'ぶっ殺す', 'fuck', 'bitch'];
+
+    input.addEventListener('input', () => {
+        btn.disabled = input.value.trim() === '';
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    });
+
+    const sendMessage = async () => {
+        if (SecureEngine.detectSpam()) { alert('スパム検知：連打は禁止されています。'); return; }
+        const val = input.value.trim();
+        if (!val || !currentRoomId) return;
+        if (NG_WORDS.some(w => val.toLowerCase().includes(w))) {
+            alert('【不適切発言検知】禁止ワードが含まれています。送信できません。');
+            return;
+        }
+        btn.disabled = true;
+        input.value = '';
+        input.style.height = 'auto';
+        try {
+            await addDoc(collection(db, 'rooms', currentRoomId, 'messages'), {
+                name: myName, text: val, userId: myUserId, createdAt: serverTimestamp()
+            });
+        } catch(e) { alert('送信失敗: ' + e.message); }
+    };
+
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    btn.onclick = sendMessage;
+
+    // ===== チャット開始 =====
+    function startChat() {
+        let lastDate = '';
+        let firstLoad = true;
+
+        document.getElementById('header-title').textContent =
+            `${isAdmin ? '👑 ' : ''}チャット ${currentRoomId}`;
+
+        // ルーム情報監視（管理者変更を反映）
+        roomUnsubscribe = onSnapshot(doc(db, 'rooms', currentRoomId), async snap => {
+            if (snap.exists()) {
+                currentAdmin = snap.data().admin || '';
+                // 管理者トークンで認証（名前変更で騙れないようにする）
+                const localToken = localStorage.getItem('adminToken-' + currentRoomId);
+                if (localToken && snap.data().adminTokenHash) {
+                    const localTokenHash = await computeHash(localToken);
+                    isAdmin = localTokenHash === snap.data().adminTokenHash;
+                } else {
+                    isAdmin = currentAdmin === myName;
+                }
+                document.getElementById('pw-change-btn').style.display = isAdmin ? '' : 'none';
+                document.getElementById('header-title').textContent =
+                    `${isAdmin ? '👑 ' : ''}チャット ${currentRoomId}`;
+            }
+        });
+
+        // 通報監視（管理者のみ）
+        reportUnsubscribe = onSnapshot(
+            query(collection(db, 'rooms', currentRoomId, 'reports'), orderBy('createdAt', 'desc'), limit(5)),
+            reportSnap => {
+                if (currentAdmin !== myName) return;
+                reportSnap.docChanges().forEach(change => {
+                    if (change.type !== 'added') return;
+                    const rData = change.doc.data();
+                    const rTime = rData.createdAt ? rData.createdAt.toMillis() : Date.now();
+                    if (Date.now() - rTime < 10000) {
+                        const toast = document.createElement('div');
+                        toast.className = 'report-toast';
+                        toast.textContent = `🚨【管理者通知】${rData.reporter}さんが通報: 「${rData.text.slice(0, 15)}...」(対象: ${rData.target})`;
+                        chatBox.appendChild(toast);
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        setTimeout(() => { toast.remove(); }, 4000);
+                    }
+                });
+            }
+        );
+
+        // メッセージ監視
+        const q = query(
+            collection(db, 'rooms', currentRoomId, 'messages'),
+            orderBy('createdAt', 'asc'), limit(200)
+        );
+
+        chatUnsubscribe = onSnapshot(q, snapshot => {
+            loadingScreen.style.display = 'none';
+            const wasAtBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 60;
+            chatBox.innerHTML = '';
+            lastDate = '';
+
+            snapshot.forEach(msgDoc => {
+                const data = msgDoc.data();
+                if (!data.text || !data.name) return;
+
+                // システムメッセージ
+                if (data.name === 'SYSTEM') {
+                    const sys = document.createElement('div');
+                    sys.className = 'date-sep';
+                    sys.textContent = data.text;
+                    chatBox.appendChild(sys);
+                    return;
+                }
+
+                // キック処理（★修正：変数名をkickTargetに変更してdocと衝突しない）
+                if (data.name === 'SYSTEM_KICK') {
+                    if (data.target === myName) {
+                        exitRoom().then(() => {
+                            alert('【強制退出】管理者にキックされました。');
+                        });
+                    }
+                    return;
+                }
+
+                // NGワードフィルター
+                const isNg = NG_WORDS.some(w => data.text.toLowerCase().includes(w));
+
+                // 日付区切り
+                const dateStr = data.createdAt ? formatDate(data.createdAt) : '';
+                if (dateStr && dateStr !== lastDate) {
+                    const sep = document.createElement('div');
+                    sep.className = 'date-sep';
+                    sep.textContent = dateStr;
+                    chatBox.appendChild(sep);
+                    lastDate = dateStr;
+                }
+
+                const isMe = data.name === myName;
+                const row = document.createElement('div');
+                row.className = `msg-row ${isMe ? 'me' : 'other'}`;
+
+                // アバター
+                if (!isMe) {
+                    const av = document.createElement('div');
+                    av.className = 'avatar';
+                    av.textContent = getInitial(data.name);
+                    const colors = ['#00b900','#0099ff','#ff6b35','#9c27b0','#e91e63','#ff9800'];
+                    let hash = 0;
+                    for (const c of data.name) hash += c.charCodeAt(0);
+                    av.style.background = colors[hash % colors.length];
+                    row.appendChild(av);
+                }
+
+                const group = document.createElement('div');
+                group.className = 'msg-group';
+
+                // 送信者名
+                if (!isMe) {
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'sender-name';
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.textContent = data.name;
+                    nameEl.appendChild(nameSpan);
+
+                    // 管理者バッジ
+                    if (data.name === currentAdmin) {
+                        const badge = document.createElement('span');
+                        badge.className = 'admin-badge';
+                        badge.textContent = '管理者';
+                        nameEl.insertBefore(badge, nameSpan);
+                    }
+
+                    // 通報ボタン
+                    const reportBtn = document.createElement('button');
+                    reportBtn.className = 'action-btn btn-report';
+                    reportBtn.textContent = '🚨通報';
+                    reportBtn.onclick = async () => {
+                        const nowTime = Date.now();
+                        if (nowTime - lastReportTime < 3000) { alert('通報は3秒間隔をあけてください。'); return; }
+                        lastReportTime = nowTime;
+                        if (confirm(`「${data.name}」さんのメッセージを通報しますか？`)) {
+                            try {
+                                await addDoc(collection(db, 'rooms', currentRoomId, 'reports'), {
+                                    target: data.name, text: data.text,
+                                    reporter: myName, createdAt: serverTimestamp()
+                                });
+                                alert('通報しました。管理者にのみ通知されます。');
+                            } catch { alert('通報に失敗しました。'); }
+                        }
+                    };
+                    nameEl.appendChild(reportBtn);
+
+                    // キックボタン（管理者のみ）
+                    if (isAdmin && data.name !== myName) {
+                        const kickBtn = document.createElement('button');
+                        kickBtn.className = 'action-btn btn-kick';
+                        kickBtn.textContent = '❌退出';
+                        kickBtn.onclick = async () => {
+                            if (!confirm(`「${data.name}」を強制退出させますか？`)) return;
+                            try {
+                                // 名前でBAN
+                                const kickDocRef = doc(db, 'rooms', currentRoomId, 'bans', data.name);
+                                await setDoc(kickDocRef, { bannedAt: serverTimestamp(), bannedBy: myName });
+                                // userIdでもBAN（名前変更で回避できないようにする）
+                                if (data.userId) {
+                                    const uidBanRef = doc(db, 'rooms', currentRoomId, 'bans', 'uid_' + data.userId);
+                                    await setDoc(uidBanRef, { bannedAt: serverTimestamp(), bannedBy: myName, originalName: data.name });
+                                }
+                                await addDoc(collection(db, 'rooms', currentRoomId, 'messages'), {
+                                    name: 'SYSTEM_KICK', target: data.name,
+                                    text: 'kick', createdAt: serverTimestamp()
+                                });
+                                alert(`「${data.name}」を強制退出させました。`);
+                            } catch(e) { alert('キック失敗: ' + e.message); }
+                        };
+                        nameEl.appendChild(kickBtn);
+                    }
+
+                    group.appendChild(nameEl);
+                }
+
+                // バブル
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble' + (isNg ? ' ng' : '');
+                bubble.innerHTML = isNg
+                    ? esc('⚠️【不適切発言としてブロックされました】')
+                    : renderContent(data.text);
+                group.appendChild(bubble);
+
+                row.appendChild(group);
+
+                // 時刻
+                const timeEl = document.createElement('div');
+                timeEl.className = 'msg-time';
+                timeEl.textContent = formatTime(data.createdAt);
+                row.appendChild(timeEl);
+
+                chatBox.appendChild(row);
+            });
+
+            if (firstLoad || wasAtBottom) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+                firstLoad = false;
+            }
+
+            document.getElementById('header-sub').textContent =
+                `ルーム: ${currentRoomId} · ${snapshot.size}件${isAdmin ? ' · 管理者' : ''}`;
+
+        }, err => {
+            loadingScreen.style.display = 'none';
+            alert('接続エラー: ' + err.message);
+        });
+    }
+</script>
+</body>
+</html>
